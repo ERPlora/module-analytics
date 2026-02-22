@@ -1,0 +1,244 @@
+{% load djicons i18n %}
+
+<div class="p-4">
+
+    <!-- Header with Period Selector -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold">{% trans "Sales Analytics" %}</h2>
+        <div class="flex items-center gap-2">
+            <div class="tabs tabs-border">
+                <button class="tab{% if period == 'today' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:sales_report' %}?period=today"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Today" %}
+                </button>
+                <button class="tab{% if period == 'week' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:sales_report' %}?period=week"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Week" %}
+                </button>
+                <button class="tab{% if period == 'month' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:sales_report' %}?period=month"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Month" %}
+                </button>
+                <button class="tab{% if period == 'quarter' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:sales_report' %}?period=quarter"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Quarter" %}
+                </button>
+                <button class="tab{% if period == 'year' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:sales_report' %}?period=year"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Year" %}
+                </button>
+            </div>
+            <a href="{% url 'analytics:export_csv' %}?type=sales&period={{ period }}"
+               class="btn btn-sm btn-outline">
+                {% icon "download-outline" %}
+                {% trans "Export" %}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                        {% icon "cash-outline" css_class="text-2xl text-primary" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Total Revenue" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ total_revenue|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center">
+                        {% icon "receipt-outline" css_class="text-2xl text-success" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Total Sales" %}</div>
+                        <div class="text-2xl font-semibold">{{ total_sales }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-warning/10 rounded-xl flex items-center justify-center">
+                        {% icon "calculator-outline" css_class="text-2xl text-warning" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Total Tax" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ total_tax|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Chart Area -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "bar-chart-outline" css_class="text-primary" %}
+                {% trans "Revenue Over Time" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if revenue_by_day %}
+            <div class="overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Date" %}</th>
+                            <th class="text-right">{% trans "Sales" %}</th>
+                            <th class="text-right">{% trans "Revenue" %}</th>
+                            <th class="w-1/2">{% trans "Visual" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day in revenue_by_day %}
+                        <tr>
+                            <td>{{ day.date }}</td>
+                            <td class="text-right">{{ day.count }}</td>
+                            <td class="text-right font-medium">{{ settings.default_currency }} {{ day.revenue|floatformat:2 }}</td>
+                            <td>
+                                <div class="h-4 bg-primary/20 rounded-full overflow-hidden">
+                                    <div class="h-full bg-primary rounded-full" style="width: {% widthratio day.revenue total_revenue 100 %}%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-base-content/50">
+                {% icon "bar-chart-outline" css_class="text-4xl mb-2" %}
+                <p>{% trans "No sales data for this period." %}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+        <!-- Payment Methods Breakdown -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "wallet-outline" css_class="text-success" %}
+                    {% trans "Payment Methods" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                {% if payment_breakdown %}
+                <div class="list">
+                    {% for name, data in payment_breakdown.items %}
+                    <div class="list-item">
+                        <div class="list-item-content">
+                            <div class="list-item-label">{{ name }}</div>
+                            <div class="list-item-note">{{ data.count }} {% trans "transactions" %}</div>
+                        </div>
+                        <div class="list-item-end">
+                            <div class="text-right">
+                                <div class="font-medium">{{ settings.default_currency }} {{ data.total|floatformat:2 }}</div>
+                                <div class="text-xs text-base-content/50">{{ data.percentage }}%</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-base-content/50">
+                    <p class="text-sm">{% trans "No payment data available." %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sales by Employee -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "people-outline" css_class="text-primary" %}
+                    {% trans "Sales by Employee" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                {% if sales_by_employee %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Employee" %}</th>
+                            <th class="text-right">{% trans "Sales" %}</th>
+                            <th class="text-right">{% trans "Revenue" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in sales_by_employee %}
+                        <tr>
+                            <td>{{ emp.name }}</td>
+                            <td class="text-right">{{ emp.count }}</td>
+                            <td class="text-right font-medium">{{ settings.default_currency }} {{ emp.revenue|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="p-6 text-center text-base-content/50">
+                    <p class="text-sm">{% trans "No employee sales data available." %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Hourly Distribution -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "time-outline" css_class="text-warning" %}
+                {% trans "Hourly Distribution" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if hourly_distribution %}
+            <div class="grid grid-cols-12 gap-1 items-end" style="height: 120px;">
+                {% for hour in hourly_distribution %}
+                {% if hour.count > 0 %}
+                <div class="flex flex-col items-center gap-1" title="{{ hour.hour }}: {{ hour.count }} {% trans 'sales' %}">
+                    <div class="w-full bg-primary/80 rounded-t" style="height: {% widthratio hour.count total_sales 100 %}px; min-height: 4px;"></div>
+                    <span class="text-[10px] text-base-content/40">{{ hour.hour|truncatechars:2 }}</span>
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center gap-1">
+                    <div class="w-full bg-base-200 rounded-t" style="height: 2px;"></div>
+                    <span class="text-[10px] text-base-content/30">{{ hour.hour|truncatechars:2 }}</span>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6 text-base-content/50">
+                <p class="text-sm">{% trans "No hourly data available." %}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>

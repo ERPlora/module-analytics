@@ -1,0 +1,223 @@
+{% load djicons i18n %}
+
+<div class="p-4">
+
+    <!-- Header with Period Selector -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold">{% trans "Customers Analytics" %}</h2>
+        <div class="flex items-center gap-2">
+            <div class="tabs tabs-border">
+                <button class="tab{% if period == 'today' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:customers_report' %}?period=today"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Today" %}
+                </button>
+                <button class="tab{% if period == 'week' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:customers_report' %}?period=week"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Week" %}
+                </button>
+                <button class="tab{% if period == 'month' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:customers_report' %}?period=month"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Month" %}
+                </button>
+                <button class="tab{% if period == 'quarter' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:customers_report' %}?period=quarter"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Quarter" %}
+                </button>
+                <button class="tab{% if period == 'year' %} tab-active{% endif %}"
+                        hx-get="{% url 'analytics:customers_report' %}?period=year"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    {% trans "Year" %}
+                </button>
+            </div>
+            <a href="{% url 'analytics:export_csv' %}?type=customers&period={{ period }}"
+               class="btn btn-sm btn-outline">
+                {% icon "download-outline" %}
+                {% trans "Export" %}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                        {% icon "people-outline" css_class="text-2xl text-primary" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Total Customers" %}</div>
+                        <div class="text-2xl font-semibold">{{ total_customers }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center">
+                        {% icon "person-add-outline" css_class="text-2xl text-success" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "New" %}</div>
+                        <div class="text-2xl font-semibold text-success">{{ new_customers }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-warning/10 rounded-xl flex items-center justify-center">
+                        {% icon "repeat-outline" css_class="text-2xl text-warning" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Returning" %}</div>
+                        <div class="text-2xl font-semibold text-warning">{{ returning_customers }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-info/10 rounded-xl flex items-center justify-center">
+                        {% icon "diamond-outline" css_class="text-2xl text-info" %}
+                    </div>
+                    <div>
+                        <div class="text-sm text-base-content/60">{% trans "Avg. LTV" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ avg_lifetime_value|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+        <!-- Top Spenders -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "trophy-outline" css_class="text-warning" %}
+                    {% trans "Top Spenders" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                {% if top_spenders %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Customer" %}</th>
+                            <th class="text-right">{% trans "Purchases" %}</th>
+                            <th class="text-right">{% trans "Total Spent" %}</th>
+                            <th class="text-right">{% trans "Avg." %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for customer in top_spenders %}
+                        <tr>
+                            <td>
+                                <div>{{ customer.name }}</div>
+                                {% if customer.email %}
+                                <div class="text-xs text-base-content/50">{{ customer.email }}</div>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">{{ customer.total_purchases }}</td>
+                            <td class="text-right font-medium">{{ settings.default_currency }} {{ customer.total_spent|floatformat:2 }}</td>
+                            <td class="text-right text-base-content/60">{{ settings.default_currency }} {{ customer.avg_purchase|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="p-6 text-center text-base-content/50">
+                    {% icon "people-outline" css_class="text-3xl mb-2" %}
+                    <p class="text-sm">{% trans "No customer spending data available." %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Visit Frequency -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "bar-chart-outline" css_class="text-primary" %}
+                    {% trans "Visit Frequency" %}
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if visit_frequency %}
+                <div class="space-y-4">
+                    {% for freq in visit_frequency %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm font-medium">{{ freq.range }} {% trans "purchases" %}</span>
+                            <span class="text-sm text-base-content/60">{{ freq.count }} {% trans "customers" %}</span>
+                        </div>
+                        <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary rounded-full"
+                                 style="width: {% widthratio freq.count total_customers 100 %}%">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-6 text-base-content/50">
+                    {% icon "bar-chart-outline" css_class="text-3xl mb-2" %}
+                    <p class="text-sm">{% trans "No visit frequency data available." %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- New vs Returning -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "git-compare-outline" css_class="text-success" %}
+                {% trans "New vs Returning Customers" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="flex items-center gap-8">
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-success">{% trans "New Customers" %}</span>
+                        <span class="badge badge-sm color-success">{{ new_customers }}</span>
+                    </div>
+                    <div class="h-4 bg-base-200 rounded-full overflow-hidden">
+                        {% if total_customers > 0 %}
+                        <div class="h-full bg-success rounded-full" style="width: {% widthratio new_customers total_customers 100 %}%"></div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-warning">{% trans "Returning Customers" %}</span>
+                        <span class="badge badge-sm color-warning">{{ returning_customers }}</span>
+                    </div>
+                    <div class="h-4 bg-base-200 rounded-full overflow-hidden">
+                        {% if total_customers > 0 %}
+                        <div class="h-full bg-warning rounded-full" style="width: {% widthratio returning_customers total_customers 100 %}%"></div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

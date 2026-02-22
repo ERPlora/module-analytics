@@ -1,0 +1,250 @@
+{% load djicons i18n %}
+
+<div class="p-4" x-data="{ period: '{{ period|default:'month' }}' }">
+
+    <!-- Period Selector -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold">{% trans "Dashboard" %}</h2>
+        <div class="tabs tabs-border">
+            {% for value, label in period_choices %}
+            <button class="tab{% if period == value %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period={{ value }}"
+                    hx-target="#main-content-area"
+                    hx-push-url="true"
+                    @click="period = '{{ value }}'">
+                {{ label }}
+            </button>
+            {% empty %}
+            <button class="tab{% if period == 'today' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period=today"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Today" %}
+            </button>
+            <button class="tab{% if period == 'week' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period=week"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Week" %}
+            </button>
+            <button class="tab{% if period == 'month' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period=month"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Month" %}
+            </button>
+            <button class="tab{% if period == 'quarter' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period=quarter"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Quarter" %}
+            </button>
+            <button class="tab{% if period == 'year' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:dashboard' %}?period=year"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Year" %}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- KPI Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+        <!-- Revenue -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                        {% icon "cash-outline" css_class="text-2xl text-primary" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Revenue" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ total_revenue|floatformat:2 }}</div>
+                        {% if revenue_change is not None %}
+                        <div class="text-xs mt-1 {% if revenue_change >= 0 %}text-success{% else %}text-error{% endif %}">
+                            {% if revenue_change >= 0 %}+{% endif %}{{ revenue_change|floatformat:1 }}%
+                            {% trans "vs previous" %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Sales -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center">
+                        {% icon "receipt-outline" css_class="text-2xl text-success" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Total Sales" %}</div>
+                        <div class="text-2xl font-semibold">{{ total_sales }}</div>
+                        {% if sales_change is not None %}
+                        <div class="text-xs mt-1 {% if sales_change >= 0 %}text-success{% else %}text-error{% endif %}">
+                            {% if sales_change >= 0 %}+{% endif %}{{ sales_change|floatformat:1 }}%
+                            {% trans "vs previous" %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Ticket -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-warning/10 rounded-xl flex items-center justify-center">
+                        {% icon "pricetag-outline" css_class="text-2xl text-warning" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Avg. Ticket" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ avg_ticket|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Customers -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-info/10 rounded-xl flex items-center justify-center">
+                        {% icon "person-add-outline" css_class="text-2xl text-info" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "New Customers" %}</div>
+                        <div class="text-2xl font-semibold">{{ new_customers }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Second Row: Low Stock Alert + Top Products -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+        <!-- Low Stock Alert -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "alert-circle-outline" css_class="text-warning" %}
+                    {% trans "Low Stock" %}
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if low_stock_count > 0 %}
+                <div class="flex items-center gap-3">
+                    <span class="badge badge-lg color-warning">{{ low_stock_count }}</span>
+                    <span class="text-sm text-base-content/70">{% trans "products below threshold" %}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-base-content/50">{% trans "All products are well stocked." %}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Top Products -->
+        <div class="card lg:col-span-2">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "trending-up-outline" css_class="text-success" %}
+                    {% trans "Top Products" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                {% if top_products %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Product" %}</th>
+                            <th class="text-right">{% trans "Qty" %}</th>
+                            <th class="text-right">{% trans "Revenue" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in top_products %}
+                        <tr>
+                            <td>{{ product.product_name }}</td>
+                            <td class="text-right">{{ product.total_qty|floatformat:0 }}</td>
+                            <td class="text-right font-medium">{{ settings.default_currency }} {{ product.total_revenue|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="p-6 text-center text-base-content/50">
+                    {% icon "cube-outline" css_class="text-3xl mb-2" %}
+                    <p class="text-sm">{% trans "No sales data for this period." %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Quick Links -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "flash-outline" css_class="text-primary" %}
+                {% trans "Detailed Reports" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            <div class="list">
+                <button class="list-item list-item-clickable"
+                        hx-get="{% url 'analytics:sales_report' %}?period={{ period }}"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    <div class="list-item-start">
+                        {% icon "trending-up-outline" css_class="text-xl text-primary" %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{% trans "Sales Report" %}</div>
+                        <div class="list-item-note">{% trans "Revenue, payments, and employee performance" %}</div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="list-item-chevron"></span>
+                    </div>
+                </button>
+                <button class="list-item list-item-clickable"
+                        hx-get="{% url 'analytics:products_report' %}?period={{ period }}"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    <div class="list-item-start">
+                        {% icon "cube-outline" css_class="text-xl text-success" %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{% trans "Products Report" %}</div>
+                        <div class="list-item-note">{% trans "Top sellers, slow movers, and stock analysis" %}</div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="list-item-chevron"></span>
+                    </div>
+                </button>
+                <button class="list-item list-item-clickable"
+                        hx-get="{% url 'analytics:customers_report' %}?period={{ period }}"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    <div class="list-item-start">
+                        {% icon "people-outline" css_class="text-xl text-warning" %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{% trans "Customers Report" %}</div>
+                        <div class="list-item-note">{% trans "Customer segments, lifetime value, and retention" %}</div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="list-item-chevron"></span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>

@@ -1,0 +1,148 @@
+{% load djicons i18n %}
+
+<div class="p-4">
+
+    <h2 class="text-xl font-semibold mb-6">{% trans "Analytics Settings" %}</h2>
+
+    <!-- Settings Form -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "options-outline" css_class="text-primary" %}
+                {% trans "General Settings" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <form hx-post="{% url 'analytics:settings_save' %}"
+                  hx-target="#main-content-area"
+                  hx-swap="none"
+                  x-data="{ saved: false }"
+                  @htmx:after-request="saved = true; setTimeout(() => saved = false, 3000)">
+                {% csrf_token %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    <!-- Default Period -->
+                    <div class="form-group">
+                        <label class="form-group-label" for="{{ form.default_period.id_for_label }}">
+                            {% trans "Default Period" %}
+                        </label>
+                        {{ form.default_period }}
+                        <p class="text-xs text-base-content/50 mt-1">{% trans "Default time range for new reports." %}</p>
+                    </div>
+
+                    <!-- Default Currency -->
+                    <div class="form-group">
+                        <label class="form-group-label" for="{{ form.default_currency.id_for_label }}">
+                            {% trans "Currency" %}
+                        </label>
+                        {{ form.default_currency }}
+                        <p class="text-xs text-base-content/50 mt-1">{% trans "Currency code for report display (e.g. EUR, USD)." %}</p>
+                    </div>
+
+                    <!-- Fiscal Year Start -->
+                    <div class="form-group">
+                        <label class="form-group-label" for="{{ form.fiscal_year_start_month.id_for_label }}">
+                            {% trans "Fiscal Year Start Month" %}
+                        </label>
+                        {{ form.fiscal_year_start_month }}
+                        <p class="text-xs text-base-content/50 mt-1">{% trans "Month when your fiscal year starts (1=Jan, 12=Dec)." %}</p>
+                    </div>
+
+                </div>
+
+                <div class="divider my-6"></div>
+
+                <!-- Toggle Options -->
+                <div class="space-y-4">
+
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-medium">{% trans "Show Profit" %}</div>
+                            <div class="text-sm text-base-content/60">{% trans "Display profit and margin data in reports." %}</div>
+                        </div>
+                        {{ form.show_profit }}
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-medium">{% trans "Show Tax Breakdown" %}</div>
+                            <div class="text-sm text-base-content/60">{% trans "Include detailed tax breakdown in reports." %}</div>
+                        </div>
+                        {{ form.show_tax_breakdown }}
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-medium">{% trans "Compare Previous Period" %}</div>
+                            <div class="text-sm text-base-content/60">{% trans "Show comparison with previous period in dashboards." %}</div>
+                        </div>
+                        {{ form.compare_previous_period }}
+                    </div>
+
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="submit" class="btn color-primary">
+                        {% icon "save-outline" %}
+                        {% trans "Save Settings" %}
+                    </button>
+                    <span class="text-sm text-success" x-show="saved" x-cloak x-transition>
+                        {% icon "checkmark-circle-outline" %}
+                        {% trans "Saved!" %}
+                    </span>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- Saved Reports -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "bookmarks-outline" css_class="text-warning" %}
+                {% trans "Saved Reports" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            {% if saved_reports %}
+            <div class="list">
+                {% for report in saved_reports %}
+                <div class="list-item">
+                    <div class="list-item-start">
+                        {% if report.report_type == 'sales' %}
+                        {% icon "trending-up-outline" css_class="text-xl text-primary" %}
+                        {% elif report.report_type == 'products' %}
+                        {% icon "cube-outline" css_class="text-xl text-success" %}
+                        {% elif report.report_type == 'customers' %}
+                        {% icon "people-outline" css_class="text-xl text-warning" %}
+                        {% else %}
+                        {% icon "document-text-outline" css_class="text-xl text-base-content/60" %}
+                        {% endif %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{{ report.name }}</div>
+                        <div class="list-item-note">
+                            {{ report.get_report_type_display }}
+                            {% if report.is_shared %} &middot; {% trans "Shared" %}{% endif %}
+                            {% if report.last_run_at %} &middot; {% trans "Last run:" %} {{ report.last_run_at|date:"SHORT_DATE_FORMAT" }}{% endif %}
+                        </div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="badge badge-sm">{{ report.get_report_type_display }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-base-content/50">
+                {% icon "bookmarks-outline" css_class="text-3xl mb-2" %}
+                <p class="text-sm">{% trans "No saved reports yet." %}</p>
+                <p class="text-xs text-base-content/40 mt-1">{% trans "Saved reports will appear here." %}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
