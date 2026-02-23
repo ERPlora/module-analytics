@@ -175,6 +175,72 @@ def dashboard(request):
         except (ImportError, Exception):
             pass
 
+    # --- Leads data (if leads module active) ---
+    has_leads_module = False
+    pipeline_value = Decimal('0.00')
+    open_leads = 0
+    try:
+        from leads.models import Lead
+        from django.db.models import Sum as LeadSum
+        has_leads_module = True
+        leads_qs = Lead.objects.filter(hub_id=hub, is_deleted=False, status='open')
+        open_leads = leads_qs.count()
+        agg = leads_qs.aggregate(total=LeadSum('value'))
+        pipeline_value = agg['total'] or Decimal('0.00')
+    except ImportError:
+        pass
+
+    # --- Support data (if support module active) ---
+    has_support_module = False
+    open_tickets = 0
+    try:
+        from support.models import Ticket
+        has_support_module = True
+        open_tickets = Ticket.objects.filter(
+            hub_id=hub, is_deleted=False,
+            status__in=['open', 'in_progress', 'waiting_customer'],
+        ).count()
+    except ImportError:
+        pass
+
+    # --- Feedback data (if feedback module active) ---
+    has_feedback_module = False
+    avg_nps = None
+    try:
+        from feedback.models import FeedbackResponse
+        has_feedback_module = True
+        nps_qs = FeedbackResponse.objects.filter(
+            hub_id=hub, is_deleted=False,
+            form__form_type='nps_10',
+            score__isnull=False,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+        if nps_qs.exists():
+            promoters = nps_qs.filter(score__gte=9).count()
+            detractors = nps_qs.filter(score__lte=6).count()
+            total_responses = nps_qs.count()
+            if total_responses > 0:
+                avg_nps = round((promoters - detractors) / total_responses * 100)
+    except ImportError:
+        pass
+
+    # --- Loyalty module detection ---
+    has_loyalty_module = False
+    try:
+        from _loyalty.models import LoyaltyMember
+        has_loyalty_module = True
+    except ImportError:
+        pass
+
+    # --- Segments module detection ---
+    has_segments_module = False
+    try:
+        from segments.models import Segment
+        has_segments_module = True
+    except ImportError:
+        pass
+
     # Calculate percentage changes
     revenue_change = None
     sales_change = None
@@ -198,6 +264,17 @@ def dashboard(request):
         'sales_change': sales_change,
         'prev_revenue': prev_revenue,
         'prev_sales': prev_sales,
+        # CRM KPIs
+        'pipeline_value': pipeline_value,
+        'open_leads': open_leads,
+        'open_tickets': open_tickets,
+        'avg_nps': avg_nps,
+        # Module availability flags
+        'has_leads_module': has_leads_module,
+        'has_support_module': has_support_module,
+        'has_feedback_module': has_feedback_module,
+        'has_loyalty_module': has_loyalty_module,
+        'has_segments_module': has_segments_module,
     }
 
 
@@ -463,6 +540,8 @@ def customers_report(request):
     top_spenders = []
     avg_lifetime_value = Decimal('0.00')
     visit_frequency = []
+    lifecycle_distribution = []
+    source_distribution = []
 
     try:
         from customers.models import Customer
@@ -527,6 +606,34 @@ def customers_report(request):
                     'count': count,
                 })
 
+        # Lifecycle distribution
+        try:
+            from customers.models import LIFECYCLE_STAGE_CHOICES
+            for stage, label in LIFECYCLE_STAGE_CHOICES:
+                count = customers_qs.filter(lifecycle_stage=stage).count()
+                if count > 0:
+                    lifecycle_distribution.append({
+                        'stage': str(label),
+                        'key': stage,
+                        'count': count,
+                    })
+        except Exception:
+            pass
+
+        # Source distribution
+        try:
+            from customers.models import SOURCE_CHOICES
+            for source, label in SOURCE_CHOICES:
+                count = customers_qs.filter(source=source).count()
+                if count > 0:
+                    source_distribution.append({
+                        'source': str(label),
+                        'key': source,
+                        'count': count,
+                    })
+        except Exception:
+            pass
+
     except ImportError:
         pass
 
@@ -541,6 +648,438 @@ def customers_report(request):
         'top_spenders': top_spenders,
         'avg_lifetime_value': avg_lifetime_value,
         'visit_frequency': visit_frequency,
+        'lifecycle_distribution': lifecycle_distribution,
+        'source_distribution': source_distribution,
+    }
+
+
+# ============================================================================
+# Pipeline Report
+# ============================================================================
+
+@require_http_methods(["GET"])
+@login_required
+@with_module_nav('analytics', 'pipeline_report')
+@htmx_view('analytics/pages/pipeline_report.html', 'analytics/partials/pipeline_content.html')
+def pipeline_report(request):
+    hub = _hub_id(request)
+    settings = AnalyticsSettings.get_settings(hub)
+    period = request.GET.get('period', settings.default_period)
+    start_date, end_date = _get_date_range(period)
+
+    # Module availability flags
+    has_leads_module = False
+    has_quotes_module = False
+
+    # Pipeline data
+    pipeline_value = Decimal('0.00')
+    open_leads = 0
+    conversion_rate = 0
+    avg_close_days = 0
+    pipeline_by_stage = []
+    leads_by_source = []
+    loss_reasons = []
+    won_lost_monthly = []
+
+    # --- Leads data ---
+    try:
+        from leads.models import Lead, PipelineStage, LossReason, Pipeline
+        from django.db.models import Sum, Count, Avg, F
+        from django.db.models.functions import TruncMonth
+        has_leads_module = True
+
+        all_leads = Lead.objects.filter(hub_id=hub, is_deleted=False)
+        open_qs = all_leads.filter(status='open')
+        open_leads = open_qs.count()
+        agg = open_qs.aggregate(total=Sum('value'))
+        pipeline_value = agg['total'] or Decimal('0.00')
+
+        # Conversion rate (won / total closed in period)
+        period_leads = all_leads.filter(
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+        closed_leads = all_leads.filter(
+            status__in=['won', 'lost'],
+        )
+        # Filter closed leads by their won/lost date in the period
+        won_in_period = all_leads.filter(
+            status='won',
+            won_date__date__gte=start_date,
+            won_date__date__lte=end_date,
+        )
+        lost_in_period = all_leads.filter(
+            status='lost',
+            lost_date__date__gte=start_date,
+            lost_date__date__lte=end_date,
+        )
+        total_closed_period = won_in_period.count() + lost_in_period.count()
+        if total_closed_period > 0:
+            conversion_rate = round(won_in_period.count() / total_closed_period * 100)
+
+        # Average close time (won leads)
+        won_leads = all_leads.filter(status='won', won_date__isnull=False)
+        if won_leads.exists():
+            total_days = 0
+            count = 0
+            for lead in won_leads[:100]:  # Limit for performance
+                delta = lead.won_date - lead.created_at
+                total_days += delta.days
+                count += 1
+            if count > 0:
+                avg_close_days = round(total_days / count)
+
+        # Pipeline by stage
+        default_pipeline = Pipeline.objects.filter(
+            hub_id=hub, is_deleted=False, is_default=True,
+        ).first()
+        if not default_pipeline:
+            default_pipeline = Pipeline.objects.filter(
+                hub_id=hub, is_deleted=False,
+            ).first()
+
+        if default_pipeline:
+            stages = PipelineStage.objects.filter(
+                hub_id=hub, is_deleted=False,
+                pipeline=default_pipeline,
+            ).order_by('order')
+            for stage in stages:
+                stage_leads = open_qs.filter(stage=stage)
+                stage_count = stage_leads.count()
+                stage_value = stage_leads.aggregate(
+                    total=Sum('value'),
+                )['total'] or Decimal('0.00')
+                pipeline_by_stage.append({
+                    'name': stage.name,
+                    'color': stage.color,
+                    'count': stage_count,
+                    'value': float(stage_value),
+                    'probability': stage.probability,
+                })
+
+        # Leads by source
+        source_data = (
+            all_leads.filter(status='open')
+            .values('source')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        from leads.models import SOURCE_CHOICES as LEAD_SOURCE_CHOICES
+        source_map = dict(LEAD_SOURCE_CHOICES)
+        for row in source_data:
+            leads_by_source.append({
+                'source': str(source_map.get(row['source'], row['source'])),
+                'count': row['count'],
+            })
+
+        # Loss reasons breakdown
+        loss_data = (
+            all_leads.filter(
+                status='lost',
+                loss_reason__isnull=False,
+                lost_date__date__gte=start_date,
+                lost_date__date__lte=end_date,
+            )
+            .values('loss_reason__name')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        for row in loss_data:
+            loss_reasons.append({
+                'reason': row['loss_reason__name'],
+                'count': row['count'],
+            })
+
+        # Won vs Lost per month (last 6 months)
+        six_months_ago = (timezone.now() - timedelta(days=180)).date()
+
+        won_monthly = (
+            all_leads.filter(
+                status='won',
+                won_date__date__gte=six_months_ago,
+            )
+            .annotate(month=TruncMonth('won_date'))
+            .values('month')
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
+        lost_monthly = (
+            all_leads.filter(
+                status='lost',
+                lost_date__date__gte=six_months_ago,
+            )
+            .annotate(month=TruncMonth('lost_date'))
+            .values('month')
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
+
+        # Merge into a dict
+        monthly_data = {}
+        for row in won_monthly:
+            key = row['month'].strftime('%Y-%m')
+            monthly_data.setdefault(key, {'month': row['month'].strftime('%b %Y'), 'won': 0, 'lost': 0})
+            monthly_data[key]['won'] = row['count']
+        for row in lost_monthly:
+            key = row['month'].strftime('%Y-%m')
+            monthly_data.setdefault(key, {'month': row['month'].strftime('%b %Y'), 'won': 0, 'lost': 0})
+            monthly_data[key]['lost'] = row['count']
+        won_lost_monthly = [monthly_data[k] for k in sorted(monthly_data.keys())]
+
+    except ImportError:
+        pass
+
+    # --- Quotes data ---
+    quotes_total = 0
+    quotes_value = Decimal('0.00')
+    quotes_accepted = 0
+    quotes_acceptance_rate = 0
+    try:
+        from quotes.models import Quote
+        from django.db.models import Sum as QSum, Count as QCount
+        has_quotes_module = True
+
+        quotes_qs = Quote.objects.filter(
+            hub_id=hub, is_deleted=False,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+        quotes_total = quotes_qs.count()
+        q_agg = quotes_qs.aggregate(total=QSum('total'))
+        quotes_value = q_agg['total'] or Decimal('0.00')
+        quotes_accepted = quotes_qs.filter(status='accepted').count()
+        # Acceptance rate: accepted / (accepted + rejected)
+        quotes_decided = quotes_qs.filter(status__in=['accepted', 'rejected']).count()
+        if quotes_decided > 0:
+            quotes_acceptance_rate = round(quotes_accepted / quotes_decided * 100)
+    except ImportError:
+        pass
+
+    return {
+        'settings': settings,
+        'period': period,
+        'start_date': start_date,
+        'end_date': end_date,
+        # Module flags
+        'has_leads_module': has_leads_module,
+        'has_quotes_module': has_quotes_module,
+        # Pipeline KPIs
+        'pipeline_value': pipeline_value,
+        'open_leads': open_leads,
+        'conversion_rate': conversion_rate,
+        'avg_close_days': avg_close_days,
+        # Pipeline details
+        'pipeline_by_stage': pipeline_by_stage,
+        'leads_by_source': leads_by_source,
+        'loss_reasons': loss_reasons,
+        'won_lost_monthly': won_lost_monthly,
+        # Quotes
+        'quotes_total': quotes_total,
+        'quotes_value': quotes_value,
+        'quotes_accepted': quotes_accepted,
+        'quotes_acceptance_rate': quotes_acceptance_rate,
+    }
+
+
+# ============================================================================
+# Loyalty Report
+# ============================================================================
+
+@require_http_methods(["GET"])
+@login_required
+@with_module_nav('analytics', 'loyalty_report')
+@htmx_view('analytics/pages/loyalty_report.html', 'analytics/partials/loyalty_content.html')
+def loyalty_report(request):
+    hub = _hub_id(request)
+    settings = AnalyticsSettings.get_settings(hub)
+    period = request.GET.get('period', settings.default_period)
+    start_date, end_date = _get_date_range(period)
+
+    # Module availability flags
+    has_customers_module = False
+    has_loyalty_module = False
+    has_feedback_module = False
+    has_segments_module = False
+
+    # Customer data
+    total_customers = 0
+    lifecycle_distribution = []
+    source_distribution = []
+
+    # --- Customers data ---
+    try:
+        from customers.models import Customer, LIFECYCLE_STAGE_CHOICES, SOURCE_CHOICES
+        has_customers_module = True
+
+        customers_qs = Customer.objects.filter(hub_id=hub, is_deleted=False)
+        total_customers = customers_qs.count()
+
+        # Lifecycle distribution
+        for stage, label in LIFECYCLE_STAGE_CHOICES:
+            count = customers_qs.filter(lifecycle_stage=stage).count()
+            if count > 0:
+                lifecycle_distribution.append({
+                    'stage': str(label),
+                    'key': stage,
+                    'count': count,
+                })
+
+        # Source distribution
+        for source, label in SOURCE_CHOICES:
+            count = customers_qs.filter(source=source).count()
+            if count > 0:
+                source_distribution.append({
+                    'source': str(label),
+                    'key': source,
+                    'count': count,
+                })
+    except ImportError:
+        pass
+
+    # --- Loyalty data ---
+    total_members = 0
+    active_members = 0
+    tier_distribution = []
+    total_points_issued = 0
+    total_points_redeemed = 0
+    try:
+        from _loyalty.models import LoyaltyMember, LoyaltyTier, PointsTransaction
+        from django.db.models import Sum as LSum
+        has_loyalty_module = True
+
+        members_qs = LoyaltyMember.objects.filter(hub_id=hub, is_deleted=False)
+        total_members = members_qs.count()
+        active_members = members_qs.filter(is_active=True).count()
+
+        # Tier distribution
+        tiers = LoyaltyTier.objects.filter(
+            hub_id=hub, is_deleted=False, is_active=True,
+        ).order_by('sort_order')
+        for tier in tiers:
+            count = members_qs.filter(tier=tier).count()
+            tier_distribution.append({
+                'name': tier.name,
+                'color': tier.color,
+                'count': count,
+            })
+
+        # Points issued vs redeemed in period
+        txn_qs = PointsTransaction.objects.filter(
+            hub_id=hub, is_deleted=False,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+        earn_agg = txn_qs.filter(
+            transaction_type='earn',
+        ).aggregate(total=LSum('points'))
+        total_points_issued = earn_agg['total'] or 0
+
+        redeem_agg = txn_qs.filter(
+            transaction_type='redeem',
+        ).aggregate(total=LSum('points'))
+        total_points_redeemed = abs(redeem_agg['total'] or 0)
+    except ImportError:
+        pass
+
+    # --- Feedback / NPS data ---
+    avg_nps = None
+    nps_trend = []
+    try:
+        from feedback.models import FeedbackResponse
+        from django.db.models.functions import TruncMonth as FTruncMonth
+        from django.db.models import Count as FCount
+        has_feedback_module = True
+
+        nps_qs = FeedbackResponse.objects.filter(
+            hub_id=hub, is_deleted=False,
+            form__form_type='nps_10',
+            score__isnull=False,
+        )
+
+        # Overall NPS for the period
+        period_nps = nps_qs.filter(
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+        if period_nps.exists():
+            promoters = period_nps.filter(score__gte=9).count()
+            detractors = period_nps.filter(score__lte=6).count()
+            total_responses = period_nps.count()
+            if total_responses > 0:
+                avg_nps = round((promoters - detractors) / total_responses * 100)
+
+        # NPS trend (last 6 months)
+        six_months_ago = (timezone.now() - timedelta(days=180)).date()
+        monthly_responses = (
+            nps_qs.filter(created_at__date__gte=six_months_ago)
+            .annotate(month=FTruncMonth('created_at'))
+            .values('month')
+            .annotate(total=FCount('id'))
+            .order_by('month')
+        )
+        for row in monthly_responses:
+            month_qs = nps_qs.filter(
+                created_at__year=row['month'].year,
+                created_at__month=row['month'].month,
+            )
+            m_promoters = month_qs.filter(score__gte=9).count()
+            m_detractors = month_qs.filter(score__lte=6).count()
+            m_total = row['total']
+            m_nps = round((m_promoters - m_detractors) / m_total * 100) if m_total > 0 else 0
+            nps_trend.append({
+                'month': row['month'].strftime('%b %Y'),
+                'nps': m_nps,
+                'responses': m_total,
+            })
+    except ImportError:
+        pass
+
+    # --- Segments data ---
+    active_segments = []
+    try:
+        from segments.models import Segment
+        has_segments_module = True
+
+        segments_qs = Segment.objects.filter(
+            hub_id=hub, is_deleted=False, is_active=True,
+        ).order_by('-customer_count')[:10]
+        active_segments = [
+            {
+                'name': s.name,
+                'color': s.color,
+                'count': s.customer_count,
+                'description': s.description,
+            }
+            for s in segments_qs
+        ]
+    except ImportError:
+        pass
+
+    return {
+        'settings': settings,
+        'period': period,
+        'start_date': start_date,
+        'end_date': end_date,
+        # Module flags
+        'has_customers_module': has_customers_module,
+        'has_loyalty_module': has_loyalty_module,
+        'has_feedback_module': has_feedback_module,
+        'has_segments_module': has_segments_module,
+        # Customer data
+        'total_customers': total_customers,
+        'lifecycle_distribution': lifecycle_distribution,
+        'source_distribution': source_distribution,
+        # Loyalty data
+        'total_members': total_members,
+        'active_members': active_members,
+        'tier_distribution': tier_distribution,
+        'total_points_issued': total_points_issued,
+        'total_points_redeemed': total_points_redeemed,
+        # Feedback data
+        'avg_nps': avg_nps,
+        'nps_trend': nps_trend,
+        # Segments
+        'active_segments': active_segments,
     }
 
 
@@ -645,6 +1184,81 @@ def api_chart_data(request):
             for row in items:
                 labels.append(row['product_name'] or _('Unknown'))
                 values.append(float(row['total']))
+        except ImportError:
+            pass
+
+    elif chart_type == 'pipeline_by_stage':
+        try:
+            from leads.models import Lead, PipelineStage, Pipeline
+            from django.db.models import Sum, Count
+
+            default_pipeline = Pipeline.objects.filter(
+                hub_id=hub, is_deleted=False, is_default=True,
+            ).first()
+            if not default_pipeline:
+                default_pipeline = Pipeline.objects.filter(
+                    hub_id=hub, is_deleted=False,
+                ).first()
+
+            if default_pipeline:
+                stages = PipelineStage.objects.filter(
+                    hub_id=hub, is_deleted=False,
+                    pipeline=default_pipeline,
+                ).order_by('order')
+                for stage in stages:
+                    stage_value = Lead.objects.filter(
+                        hub_id=hub, is_deleted=False,
+                        status='open', stage=stage,
+                    ).aggregate(total=Sum('value'))['total'] or 0
+                    labels.append(stage.name)
+                    values.append(float(stage_value))
+        except ImportError:
+            pass
+
+    elif chart_type == 'lifecycle':
+        try:
+            from customers.models import Customer, LIFECYCLE_STAGE_CHOICES
+            from django.db.models import Count
+
+            customers_qs = Customer.objects.filter(hub_id=hub, is_deleted=False)
+            for stage, label in LIFECYCLE_STAGE_CHOICES:
+                count = customers_qs.filter(lifecycle_stage=stage).count()
+                if count > 0:
+                    labels.append(str(label))
+                    values.append(count)
+        except ImportError:
+            pass
+
+    elif chart_type == 'nps_trend':
+        try:
+            from feedback.models import FeedbackResponse
+            from django.db.models import Count
+            from django.db.models.functions import TruncMonth
+
+            six_months_ago = (timezone.now() - timedelta(days=180)).date()
+            nps_qs = FeedbackResponse.objects.filter(
+                hub_id=hub, is_deleted=False,
+                form__form_type='nps_10',
+                score__isnull=False,
+                created_at__date__gte=six_months_ago,
+            )
+            monthly = (
+                nps_qs.annotate(month=TruncMonth('created_at'))
+                .values('month')
+                .annotate(total=Count('id'))
+                .order_by('month')
+            )
+            for row in monthly:
+                month_qs = nps_qs.filter(
+                    created_at__year=row['month'].year,
+                    created_at__month=row['month'].month,
+                )
+                promoters = month_qs.filter(score__gte=9).count()
+                detractors = month_qs.filter(score__lte=6).count()
+                m_total = row['total']
+                nps = round((promoters - detractors) / m_total * 100) if m_total > 0 else 0
+                labels.append(row['month'].strftime('%b %Y'))
+                values.append(nps)
         except ImportError:
             pass
 

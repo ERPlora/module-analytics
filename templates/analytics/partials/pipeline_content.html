@@ -1,0 +1,303 @@
+{% load djicons i18n %}
+
+<div class="p-4">
+
+    <!-- Header with Period Selector -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold">{% trans "Pipeline Analytics" %}</h2>
+        <div class="tabs tabs-border">
+            <button class="tab{% if period == 'today' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:pipeline_report' %}?period=today"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Today" %}
+            </button>
+            <button class="tab{% if period == 'week' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:pipeline_report' %}?period=week"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Week" %}
+            </button>
+            <button class="tab{% if period == 'month' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:pipeline_report' %}?period=month"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Month" %}
+            </button>
+            <button class="tab{% if period == 'quarter' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:pipeline_report' %}?period=quarter"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Quarter" %}
+            </button>
+            <button class="tab{% if period == 'year' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:pipeline_report' %}?period=year"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Year" %}
+            </button>
+        </div>
+    </div>
+
+    {% if has_leads_module %}
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+        <!-- Pipeline Value -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                        {% icon "cash-outline" css_class="text-2xl text-primary" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Pipeline Value" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ pipeline_value|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Leads -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-info/10 rounded-xl flex items-center justify-center">
+                        {% icon "funnel-outline" css_class="text-2xl text-info" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Open Leads" %}</div>
+                        <div class="text-2xl font-semibold">{{ open_leads }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conversion Rate -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center">
+                        {% icon "checkmark-circle-outline" css_class="text-2xl text-success" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Conversion Rate" %}</div>
+                        <div class="text-2xl font-semibold">{{ conversion_rate }}%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Avg Close Time -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-warning/10 rounded-xl flex items-center justify-center">
+                        {% icon "time-outline" css_class="text-2xl text-warning" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Avg. Close Time" %}</div>
+                        <div class="text-2xl font-semibold">{{ avg_close_days }} {% trans "days" %}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Pipeline by Stage -->
+    {% if pipeline_by_stage %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "git-branch-outline" css_class="text-primary" %}
+                {% trans "Pipeline by Stage" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="space-y-4">
+                {% for stage in pipeline_by_stage %}
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="badge badge-sm color-{{ stage.color }}">{{ stage.count }}</span>
+                            <span class="text-sm font-medium">{{ stage.name }}</span>
+                            <span class="text-xs text-base-content/50">({{ stage.probability }}%)</span>
+                        </div>
+                        <span class="text-sm font-medium">{{ settings.default_currency }} {{ stage.value|floatformat:2 }}</span>
+                    </div>
+                    {% if pipeline_value %}
+                    <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-{{ stage.color }} rounded-full"
+                             style="width: {% widthratio stage.value pipeline_value 100 %}%">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+        <!-- Leads by Source -->
+        {% if leads_by_source %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "globe-outline" css_class="text-info" %}
+                    {% trans "Leads by Source" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Source" %}</th>
+                            <th class="text-right">{% trans "Count" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in leads_by_source %}
+                        <tr>
+                            <td>{{ item.source }}</td>
+                            <td class="text-right">
+                                <span class="badge badge-sm">{{ item.count }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Loss Reasons -->
+        {% if loss_reasons %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "close-circle-outline" css_class="text-error" %}
+                    {% trans "Loss Reasons" %}
+                </h3>
+            </div>
+            <div class="card-body p-0">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Reason" %}</th>
+                            <th class="text-right">{% trans "Count" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in loss_reasons %}
+                        <tr>
+                            <td>{{ item.reason }}</td>
+                            <td class="text-right">
+                                <span class="badge badge-sm color-error">{{ item.count }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- Won vs Lost Monthly -->
+    {% if won_lost_monthly %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "bar-chart-outline" css_class="text-success" %}
+                {% trans "Won vs Lost (Last 6 Months)" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{% trans "Month" %}</th>
+                        <th class="text-right text-success">{% trans "Won" %}</th>
+                        <th class="text-right text-error">{% trans "Lost" %}</th>
+                        <th class="text-right">{% trans "Rate" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in won_lost_monthly %}
+                    <tr>
+                        <td>{{ row.month }}</td>
+                        <td class="text-right">
+                            <span class="badge badge-sm color-success">{{ row.won }}</span>
+                        </td>
+                        <td class="text-right">
+                            <span class="badge badge-sm color-error">{{ row.lost }}</span>
+                        </td>
+                        <td class="text-right text-base-content/60">
+                            {% if row.won or row.lost %}
+                                {% widthratio row.won row.won|add:row.lost 100 %}%
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}{# has_leads_module #}
+
+    {% if has_quotes_module %}
+    <!-- Quotes Stats -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "document-text-outline" css_class="text-primary" %}
+                {% trans "Quotes Overview" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="text-center">
+                    <div class="text-2xl font-semibold">{{ quotes_total }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Quotes Sent" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ quotes_value|floatformat:2 }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Total Value" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold text-success">{{ quotes_accepted }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Accepted" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold">{{ quotes_acceptance_rate }}%</div>
+                    <div class="text-sm text-base-content/60">{% trans "Acceptance Rate" %}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not has_leads_module and not has_quotes_module %}
+    <!-- Empty state: no CRM modules -->
+    <div class="card">
+        <div class="card-body py-12 text-center">
+            {% icon "funnel-outline" css_class="text-4xl text-base-content/30 mb-3" %}
+            <h3 class="text-lg font-medium text-base-content/70 mb-2">{% trans "No Pipeline Data Available" %}</h3>
+            <p class="text-sm text-base-content/50">
+                {% trans "Install the Leads or Quotes module to see pipeline analytics here." %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>

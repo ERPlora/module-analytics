@@ -1,0 +1,301 @@
+{% load djicons i18n %}
+
+<div class="p-4">
+
+    <!-- Header with Period Selector -->
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-semibold">{% trans "Loyalty & CRM Analytics" %}</h2>
+        <div class="tabs tabs-border">
+            <button class="tab{% if period == 'today' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:loyalty_report' %}?period=today"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Today" %}
+            </button>
+            <button class="tab{% if period == 'week' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:loyalty_report' %}?period=week"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Week" %}
+            </button>
+            <button class="tab{% if period == 'month' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:loyalty_report' %}?period=month"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Month" %}
+            </button>
+            <button class="tab{% if period == 'quarter' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:loyalty_report' %}?period=quarter"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Quarter" %}
+            </button>
+            <button class="tab{% if period == 'year' %} tab-active{% endif %}"
+                    hx-get="{% url 'analytics:loyalty_report' %}?period=year"
+                    hx-target="#main-content-area"
+                    hx-push-url="true">
+                {% trans "Year" %}
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+
+        {% if has_customers_module %}
+        <!-- Total Customers -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                        {% icon "people-outline" css_class="text-2xl text-primary" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Total Customers" %}</div>
+                        <div class="text-2xl font-semibold">{{ total_customers }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_feedback_module %}
+        <!-- NPS Score -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if avg_nps is not None and avg_nps >= 50 %}bg-success/10{% elif avg_nps is not None and avg_nps >= 0 %}bg-warning/10{% elif avg_nps is not None %}bg-error/10{% else %}bg-base-200{% endif %} rounded-xl flex items-center justify-center">
+                        {% icon "happy-outline" css_class="text-2xl {% if avg_nps is not None and avg_nps >= 50 %}text-success{% elif avg_nps is not None and avg_nps >= 0 %}text-warning{% elif avg_nps is not None %}text-error{% else %}text-base-content/40{% endif %}" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "NPS Score" %}</div>
+                        <div class="text-2xl font-semibold">
+                            {% if avg_nps is not None %}{{ avg_nps }}{% else %}-{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_segments_module %}
+        <!-- Active Segments -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-info/10 rounded-xl flex items-center justify-center">
+                        {% icon "pie-chart-outline" css_class="text-2xl text-info" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Active Segments" %}</div>
+                        <div class="text-2xl font-semibold">{{ active_segments|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    {% if has_customers_module %}
+
+    <!-- Lifecycle Distribution -->
+    {% if lifecycle_distribution %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "pulse-outline" css_class="text-primary" %}
+                {% trans "Customer Lifecycle" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="space-y-4">
+                {% for item in lifecycle_distribution %}
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium">{{ item.stage }}</span>
+                        <span class="text-sm text-base-content/60">{{ item.count }} {% trans "customers" %}</span>
+                    </div>
+                    <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-primary rounded-full"
+                             style="width: {% widthratio item.count total_customers 100 %}%">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Source Distribution -->
+    {% if source_distribution %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "globe-outline" css_class="text-info" %}
+                {% trans "Customer Source" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{% trans "Source" %}</th>
+                        <th class="text-right">{% trans "Count" %}</th>
+                        <th class="text-right">{% trans "%" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in source_distribution %}
+                    <tr>
+                        <td>{{ item.source }}</td>
+                        <td class="text-right">
+                            <span class="badge badge-sm">{{ item.count }}</span>
+                        </td>
+                        <td class="text-right text-base-content/60">
+                            {% widthratio item.count total_customers 100 %}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}{# has_customers_module #}
+
+    {% if has_loyalty_module %}
+    <!-- Loyalty Program -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "heart-outline" css_class="text-error" %}
+                {% trans "Loyalty Program" %}
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="text-center">
+                    <div class="text-2xl font-semibold">{{ total_members }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Total Members" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold text-success">{{ active_members }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Active Members" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold text-primary">{{ total_points_issued|floatformat:0 }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Points Issued" %}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-semibold text-warning">{{ total_points_redeemed|floatformat:0 }}</div>
+                    <div class="text-sm text-base-content/60">{% trans "Points Redeemed" %}</div>
+                </div>
+            </div>
+
+            {% if tier_distribution %}
+            <h4 class="text-sm font-medium text-base-content/70 mb-3">{% trans "Members by Tier" %}</h4>
+            <div class="space-y-3">
+                {% for tier in tier_distribution %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background-color: {{ tier.color }}"></span>
+                        <span class="text-sm font-medium">{{ tier.name }}</span>
+                    </div>
+                    <span class="badge badge-sm">{{ tier.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if has_feedback_module %}
+    <!-- NPS Trend -->
+    {% if nps_trend %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "trending-up-outline" css_class="text-success" %}
+                {% trans "NPS Trend (Last 6 Months)" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{% trans "Month" %}</th>
+                        <th class="text-right">{% trans "NPS" %}</th>
+                        <th class="text-right">{% trans "Responses" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in nps_trend %}
+                    <tr>
+                        <td>{{ row.month }}</td>
+                        <td class="text-right">
+                            <span class="badge badge-sm {% if row.nps >= 50 %}color-success{% elif row.nps >= 0 %}color-warning{% else %}color-error{% endif %}">
+                                {{ row.nps }}
+                            </span>
+                        </td>
+                        <td class="text-right text-base-content/60">{{ row.responses }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if has_segments_module %}
+    <!-- Active Segments -->
+    {% if active_segments %}
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="card-title">
+                {% icon "pie-chart-outline" css_class="text-info" %}
+                {% trans "Active Segments" %}
+            </h3>
+        </div>
+        <div class="card-body p-0">
+            <div class="list">
+                {% for segment in active_segments %}
+                <div class="list-item">
+                    <div class="list-item-start">
+                        <span class="w-3 h-3 rounded-full bg-{{ segment.color }}"></span>
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{{ segment.name }}</div>
+                        {% if segment.description %}
+                        <div class="list-item-note">{{ segment.description|truncatewords:10 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="list-item-end">
+                        <span class="badge badge-sm">{{ segment.count }} {% trans "customers" %}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if not has_customers_module and not has_loyalty_module and not has_feedback_module and not has_segments_module %}
+    <!-- Empty state: no CRM modules -->
+    <div class="card">
+        <div class="card-body py-12 text-center">
+            {% icon "heart-outline" css_class="text-4xl text-base-content/30 mb-3" %}
+            <h3 class="text-lg font-medium text-base-content/70 mb-2">{% trans "No Loyalty Data Available" %}</h3>
+            <p class="text-sm text-base-content/50">
+                {% trans "Install the Customers, Loyalty, Feedback, or Segments module to see loyalty analytics here." %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>

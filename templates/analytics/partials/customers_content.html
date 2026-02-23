@@ -185,7 +185,7 @@
     </div>
 
     <!-- New vs Returning -->
-    <div class="card">
+    <div class="card mb-6">
         <div class="card-header">
             <h3 class="card-title">
                 {% icon "git-compare-outline" css_class="text-success" %}
@@ -218,6 +218,68 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+        <!-- Lifecycle Distribution -->
+        {% if lifecycle_distribution %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "pulse-outline" css_class="text-primary" %}
+                    {% trans "Lifecycle Stage" %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="space-y-4">
+                    {% for item in lifecycle_distribution %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm font-medium">{{ item.stage }}</span>
+                            <span class="text-sm text-base-content/60">{{ item.count }}</span>
+                        </div>
+                        <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary rounded-full"
+                                 style="width: {% widthratio item.count total_customers 100 %}%">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Source Distribution -->
+        {% if source_distribution %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    {% icon "globe-outline" css_class="text-info" %}
+                    {% trans "Acquisition Source" %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="space-y-4">
+                    {% for item in source_distribution %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm font-medium">{{ item.source }}</span>
+                            <span class="text-sm text-base-content/60">{{ item.count }}</span>
+                        </div>
+                        <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-info rounded-full"
+                                 style="width: {% widthratio item.count total_customers 100 %}%">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
     </div>
 
 </div>

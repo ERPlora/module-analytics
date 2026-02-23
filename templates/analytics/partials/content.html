@@ -126,6 +126,67 @@
 
     </div>
 
+    <!-- CRM KPI Cards (conditional) -->
+    {% if has_leads_module or has_support_module or has_feedback_module %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+
+        {% if has_leads_module %}
+        <!-- Pipeline Value -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center">
+                        {% icon "funnel-outline" css_class="text-2xl text-purple-500" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Pipeline Value" %}</div>
+                        <div class="text-2xl font-semibold">{{ settings.default_currency }} {{ pipeline_value|floatformat:2 }}</div>
+                        <div class="text-xs text-base-content/50 mt-1">{{ open_leads }} {% trans "open leads" %}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_support_module %}
+        <!-- Open Tickets -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if open_tickets > 0 %}bg-error/10{% else %}bg-success/10{% endif %} rounded-xl flex items-center justify-center">
+                        {% icon "ticket-outline" css_class="text-2xl {% if open_tickets > 0 %}text-error{% else %}text-success{% endif %}" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "Open Tickets" %}</div>
+                        <div class="text-2xl font-semibold">{{ open_tickets }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if has_feedback_module %}
+        <!-- NPS Score -->
+        <div class="card">
+            <div class="card-body p-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if avg_nps is not None and avg_nps >= 50 %}bg-success/10{% elif avg_nps is not None and avg_nps >= 0 %}bg-warning/10{% elif avg_nps is not None %}bg-error/10{% else %}bg-base-200{% endif %} rounded-xl flex items-center justify-center">
+                        {% icon "happy-outline" css_class="text-2xl {% if avg_nps is not None and avg_nps >= 50 %}text-success{% elif avg_nps is not None and avg_nps >= 0 %}text-warning{% elif avg_nps is not None %}text-error{% else %}text-base-content/40{% endif %}" %}
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm text-base-content/60">{% trans "NPS Score" %}</div>
+                        <div class="text-2xl font-semibold">
+                            {% if avg_nps is not None %}{{ avg_nps }}{% else %}-{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+    {% endif %}
+
     <!-- Second Row: Low Stock Alert + Top Products -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
 
@@ -243,6 +304,40 @@
                         <span class="list-item-chevron"></span>
                     </div>
                 </button>
+                {% if has_leads_module %}
+                <button class="list-item list-item-clickable"
+                        hx-get="{% url 'analytics:pipeline_report' %}?period={{ period }}"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    <div class="list-item-start">
+                        {% icon "funnel-outline" css_class="text-xl text-purple-500" %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{% trans "Pipeline Report" %}</div>
+                        <div class="list-item-note">{% trans "Lead stages, conversion rates, and deal analysis" %}</div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="list-item-chevron"></span>
+                    </div>
+                </button>
+                {% endif %}
+                {% if has_loyalty_module or has_feedback_module or has_segments_module %}
+                <button class="list-item list-item-clickable"
+                        hx-get="{% url 'analytics:loyalty_report' %}?period={{ period }}"
+                        hx-target="#main-content-area"
+                        hx-push-url="true">
+                    <div class="list-item-start">
+                        {% icon "heart-outline" css_class="text-xl text-error" %}
+                    </div>
+                    <div class="list-item-content">
+                        <div class="list-item-label">{% trans "Loyalty & CRM Report" %}</div>
+                        <div class="list-item-note">{% trans "Customer lifecycle, NPS, loyalty tiers, and segments" %}</div>
+                    </div>
+                    <div class="list-item-end">
+                        <span class="list-item-chevron"></span>
+                    </div>
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
