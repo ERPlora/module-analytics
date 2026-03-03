@@ -36,3 +36,24 @@ PERMISSIONS = [
     'analytics.view_loyalty_report',
     'analytics.manage_settings',
 ]
+
+ROLE_PERMISSIONS = {
+    "admin": ["*"],
+    "manager": [
+        "export_reports",
+        "view_customers_report",
+        "view_dashboard",
+        "view_loyalty_report",
+        "view_pipeline_report",
+        "view_products_report",
+        "view_sales_report",
+    ],
+    "employee": [
+        "view_customers_report",
+        "view_dashboard",
+        "view_loyalty_report",
+        "view_pipeline_report",
+        "view_products_report",
+        "view_sales_report",
+    ],
+}
