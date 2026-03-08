@@ -228,7 +228,7 @@ def dashboard(request):
     # --- Loyalty module detection ---
     has_loyalty_module = False
     try:
-        from _loyalty.models import LoyaltyMember
+        from loyalty.models import LoyaltyMember
         has_loyalty_module = True
     except ImportError:
         pass
@@ -943,7 +943,7 @@ def loyalty_report(request):
     total_points_issued = 0
     total_points_redeemed = 0
     try:
-        from _loyalty.models import LoyaltyMember, LoyaltyTier, PointsTransaction
+        from loyalty.models import LoyaltyMember, LoyaltyTier, PointsTransaction
         from django.db.models import Sum as LSum
         has_loyalty_module = True
 

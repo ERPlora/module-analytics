@@ -65,7 +65,15 @@
             <div class="card-body p-6">
                 <div class="flex items-center gap-4">
                     <div class="w-12 h-12 {% if avg_nps is not None and avg_nps >= 50 %}bg-success/10{% elif avg_nps is not None and avg_nps >= 0 %}bg-warning/10{% elif avg_nps is not None %}bg-error/10{% else %}bg-base-200{% endif %} rounded-xl flex items-center justify-center">
-                        {% icon "happy-outline" css_class="text-2xl {% if avg_nps is not None and avg_nps >= 50 %}text-success{% elif avg_nps is not None and avg_nps >= 0 %}text-warning{% elif avg_nps is not None %}text-error{% else %}text-base-content/40{% endif %}" %}
+                        {% if avg_nps is not None and avg_nps >= 50 %}
+                        {% icon "happy-outline" css_class="text-2xl text-success" %}
+                        {% elif avg_nps is not None and avg_nps >= 0 %}
+                        {% icon "happy-outline" css_class="text-2xl text-warning" %}
+                        {% elif avg_nps is not None %}
+                        {% icon "happy-outline" css_class="text-2xl text-error" %}
+                        {% else %}
+                        {% icon "happy-outline" css_class="text-2xl text-base-content/40" %}
+                        {% endif %}
                     </div>
                     <div class="flex-1">
                         <div class="text-sm text-base-content/60">{% trans "NPS Score" %}</div>
