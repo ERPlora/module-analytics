@@ -334,17 +334,19 @@ def sales_report(request):
             for row in daily
         ]
 
-        # Payment method breakdown
-        for pm in PaymentMethod.objects.filter(hub_id=hub, is_deleted=False, is_active=True):
-            pm_sales = base_qs.filter(payment_method=pm)
-            pm_count = pm_sales.count()
-            if pm_count > 0:
-                pm_total = pm_sales.aggregate(s=Sum('total'))['s'] or Decimal('0.00')
-                payment_breakdown[pm.name] = {
-                    'count': pm_count,
-                    'total': float(pm_total),
-                    'percentage': round(pm_count * 100 / max(total_sales, 1)),
-                }
+        # Payment method breakdown (single query)
+        pm_data = (
+            base_qs
+            .values('payment_method__name')
+            .annotate(count=Count('id'), total=Sum('total'))
+            .filter(count__gt=0)
+        )
+        for row in pm_data:
+            payment_breakdown[row['payment_method__name']] = {
+                'count': row['count'],
+                'total': float(row['total'] or Decimal('0.00')),
+                'percentage': round(row['count'] * 100 / max(total_sales, 1)),
+            }
 
         # Sales by employee
         emp_data = (
