@@ -7,6 +7,7 @@ MODULE_ICON = 'analytics-outline'
 MODULE_DESCRIPTION = _('Business intelligence dashboards and cross-module analytics')
 MODULE_AUTHOR = 'ERPlora'
 MODULE_CATEGORY = 'analytics'
+HAS_MODELS = True
 
 MENU = {
     'label': _('Analytics'),
