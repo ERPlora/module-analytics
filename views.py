@@ -547,7 +547,7 @@ def customers_report(request):
 
     try:
         from customers.models import Customer
-        from django.db.models import Sum, Avg
+        from django.db.models import Sum, Avg, Count
 
         customers_qs = Customer.objects.filter(
             hub_id=hub, is_deleted=False,
@@ -608,30 +608,32 @@ def customers_report(request):
                     'count': count,
                 })
 
-        # Lifecycle distribution
+        # Lifecycle distribution (single query)
         try:
             from customers.models import LIFECYCLE_STAGE_CHOICES
-            for stage, label in LIFECYCLE_STAGE_CHOICES:
-                count = customers_qs.filter(lifecycle_stage=stage).count()
-                if count > 0:
+            stage_labels = dict(LIFECYCLE_STAGE_CHOICES)
+            for row in customers_qs.values('lifecycle_stage').annotate(count=Count('id')).filter(count__gt=0):
+                stage_key = row['lifecycle_stage']
+                if stage_key in stage_labels:
                     lifecycle_distribution.append({
-                        'stage': str(label),
-                        'key': stage,
-                        'count': count,
+                        'stage': str(stage_labels[stage_key]),
+                        'key': stage_key,
+                        'count': row['count'],
                     })
         except Exception:
             pass
 
-        # Source distribution
+        # Source distribution (single query)
         try:
             from customers.models import SOURCE_CHOICES
-            for source, label in SOURCE_CHOICES:
-                count = customers_qs.filter(source=source).count()
-                if count > 0:
+            source_labels = dict(SOURCE_CHOICES)
+            for row in customers_qs.values('source').annotate(count=Count('id')).filter(count__gt=0):
+                src_key = row['source']
+                if src_key in source_labels:
                     source_distribution.append({
-                        'source': str(label),
-                        'key': source,
-                        'count': count,
+                        'source': str(source_labels[src_key]),
+                        'key': src_key,
+                        'count': row['count'],
                     })
         except Exception:
             pass
@@ -719,17 +721,11 @@ def pipeline_report(request):
         if total_closed_period > 0:
             conversion_rate = round(won_in_period.count() / total_closed_period * 100)
 
-        # Average close time (won leads)
+        # Average close time (won leads) — single aggregate query
         won_leads = all_leads.filter(status='won', won_date__isnull=False)
-        if won_leads.exists():
-            total_days = 0
-            count = 0
-            for lead in won_leads[:100]:  # Limit for performance
-                delta = lead.won_date - lead.created_at
-                total_days += delta.days
-                count += 1
-            if count > 0:
-                avg_close_days = round(total_days / count)
+        avg_delta = won_leads.aggregate(avg=Avg(F('won_date') - F('created_at')))['avg']
+        if avg_delta is not None:
+            avg_close_days = round(avg_delta.days)
 
         # Pipeline by stage
         default_pipeline = Pipeline.objects.filter(
@@ -745,17 +741,20 @@ def pipeline_report(request):
                 hub_id=hub, is_deleted=False,
                 pipeline=default_pipeline,
             ).order_by('order')
+            # Aggregate lead counts/values per stage in a single query
+            stage_stats = {
+                row['stage_id']: row
+                for row in open_qs.filter(stage__in=stages)
+                .values('stage_id')
+                .annotate(count=Count('id'), total=Sum('value'))
+            }
             for stage in stages:
-                stage_leads = open_qs.filter(stage=stage)
-                stage_count = stage_leads.count()
-                stage_value = stage_leads.aggregate(
-                    total=Sum('value'),
-                )['total'] or Decimal('0.00')
+                row = stage_stats.get(stage.id, {})
                 pipeline_by_stage.append({
                     'name': stage.name,
                     'color': stage.color,
-                    'count': stage_count,
-                    'value': float(stage_value),
+                    'count': row.get('count', 0),
+                    'value': float(row.get('total') or Decimal('0.00')),
                     'probability': stage.probability,
                 })
 
